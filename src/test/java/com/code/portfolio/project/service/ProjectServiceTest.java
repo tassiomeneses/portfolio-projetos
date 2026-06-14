@@ -1,0 +1,285 @@
+package com.code.portfolio.project.service;
+
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
+
+import com.code.portfolio.common.exception.BusinessRuleException;
+import com.code.portfolio.common.exception.ResourceNotFoundException;
+import com.code.portfolio.members.Member;
+import com.code.portfolio.members.MemberClient;
+import com.code.portfolio.project.domain.Project;
+import com.code.portfolio.project.domain.ProjectMember;
+import com.code.portfolio.project.domain.ProjectStatus;
+import com.code.portfolio.project.domain.RiskCalculator;
+import com.code.portfolio.project.dto.ProjectRequest;
+import com.code.portfolio.project.dto.ProjectResponse;
+import com.code.portfolio.project.mapper.ProjectMapper;
+import com.code.portfolio.project.repository.ProjectMemberRepository;
+import com.code.portfolio.project.repository.ProjectRepository;
+import java.math.BigDecimal;
+import org.springframework.data.repository.CrudRepository;
+import java.time.LocalDate;
+import java.util.List;
+import java.util.Optional;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.Mock;
+import org.mockito.junit.jupiter.MockitoExtension;
+
+@ExtendWith(MockitoExtension.class)
+class ProjectServiceTest {
+
+    @Mock private ProjectRepository projectRepository;
+    @Mock private ProjectMemberRepository projectMemberRepository;
+    @Mock private MemberClient memberClient;
+
+    private ProjectService service;
+
+    @BeforeEach
+    void setUp() {
+        ProjectMapper mapper = new ProjectMapper(new RiskCalculator());
+        service = new ProjectService(projectRepository, projectMemberRepository, mapper, memberClient);
+    }
+
+    // ---------------- create ----------------
+
+    @Test
+    void create_persisteProjetoNoStatusInicial() {
+        when(memberClient.findById(1L)).thenReturn(Optional.of(gerente(1L)));
+        when(projectRepository.save(any(Project.class))).thenAnswer(invocation -> invocation.getArgument(0));
+
+        ProjectResponse response = service.create(request());
+
+        assertThat(response.status()).isEqualTo(ProjectStatus.EM_ANALISE);
+        verify(projectRepository).save(any(Project.class));
+    }
+
+    @Test
+    void create_falhaQuandoPrevisaoTerminoNaoEPosteriorAoInicio() {
+        ProjectRequest invalido = new ProjectRequest("X", LocalDate.of(2025, 1, 1), LocalDate.of(2025, 1, 1),
+                null, new BigDecimal("1000"), "d", 1L);
+
+        assertThatThrownBy(() -> service.create(invalido)).isInstanceOf(BusinessRuleException.class);
+        verify(projectRepository, never()).save(any());
+    }
+
+    @Test
+    void create_falhaQuandoGerenteNaoExiste() {
+        when(memberClient.findById(99L)).thenReturn(Optional.empty());
+        ProjectRequest req = new ProjectRequest("X", LocalDate.of(2025, 1, 1), LocalDate.of(2025, 3, 1),
+                null, new BigDecimal("1000"), "d", 99L);
+
+        assertThatThrownBy(() -> service.create(req))
+                .isInstanceOf(BusinessRuleException.class)
+                .hasMessageContaining("Gerente");
+    }
+
+    // ---------------- delete ----------------
+
+    @Test
+    void delete_removeQuandoStatusPermite() {
+        Project project = project(ProjectStatus.EM_ANALISE);
+        when(projectRepository.findById(1L)).thenReturn(Optional.of(project));
+
+        service.delete(1L);
+
+        // cast para CrudRepository desambigua a sobrecarga delete(...) do Spring Data JPA 4
+        verify((CrudRepository<Project, Long>) projectRepository).delete(project);
+    }
+
+    @Test
+    void delete_bloqueadoQuandoStatusImpede() {
+        when(projectRepository.findById(1L)).thenReturn(Optional.of(project(ProjectStatus.EM_ANDAMENTO)));
+
+        assertThatThrownBy(() -> service.delete(1L)).isInstanceOf(BusinessRuleException.class);
+        verify((CrudRepository<Project, Long>) projectRepository, never()).delete(any());
+    }
+
+    @Test
+    void delete_falhaQuandoProjetoNaoExiste() {
+        when(projectRepository.findById(1L)).thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> service.delete(1L)).isInstanceOf(ResourceNotFoundException.class);
+    }
+
+    // ---------------- changeStatus ----------------
+
+    @Test
+    void changeStatus_avancaUmaEtapa() {
+        when(projectRepository.findById(1L)).thenReturn(Optional.of(project(ProjectStatus.EM_ANALISE)));
+
+        ProjectResponse response = service.changeStatus(1L, ProjectStatus.ANALISE_REALIZADA);
+
+        assertThat(response.status()).isEqualTo(ProjectStatus.ANALISE_REALIZADA);
+    }
+
+    @Test
+    void changeStatus_recusaPularEtapas() {
+        when(projectRepository.findById(1L)).thenReturn(Optional.of(project(ProjectStatus.EM_ANALISE)));
+
+        assertThatThrownBy(() -> service.changeStatus(1L, ProjectStatus.INICIADO))
+                .isInstanceOf(BusinessRuleException.class);
+    }
+
+    @Test
+    void changeStatus_recusaMesmoStatus() {
+        when(projectRepository.findById(1L)).thenReturn(Optional.of(project(ProjectStatus.EM_ANALISE)));
+
+        assertThatThrownBy(() -> service.changeStatus(1L, ProjectStatus.EM_ANALISE))
+                .isInstanceOf(BusinessRuleException.class);
+    }
+
+    @Test
+    void changeStatus_iniciarExigePeloMenosUmMembro() {
+        when(projectRepository.findById(1L)).thenReturn(Optional.of(project(ProjectStatus.ANALISE_APROVADA)));
+
+        assertThatThrownBy(() -> service.changeStatus(1L, ProjectStatus.INICIADO))
+                .isInstanceOf(BusinessRuleException.class)
+                .hasMessageContaining("membro");
+    }
+
+    @Test
+    void changeStatus_iniciarComMembroFunciona() {
+        when(projectRepository.findById(1L)).thenReturn(Optional.of(project(ProjectStatus.ANALISE_APROVADA, 2L)));
+
+        ProjectResponse response = service.changeStatus(1L, ProjectStatus.INICIADO);
+
+        assertThat(response.status()).isEqualTo(ProjectStatus.INICIADO);
+    }
+
+    @Test
+    void changeStatus_encerrarDefineDataRealDeTermino() {
+        when(projectRepository.findById(1L)).thenReturn(Optional.of(project(ProjectStatus.EM_ANDAMENTO, 2L)));
+
+        ProjectResponse response = service.changeStatus(1L, ProjectStatus.ENCERRADO);
+
+        assertThat(response.status()).isEqualTo(ProjectStatus.ENCERRADO);
+        assertThat(response.actualEndDate()).isNotNull();
+    }
+
+    // ---------------- allocateMembers ----------------
+
+    @Test
+    void allocate_adicionaFuncionario() {
+        when(projectRepository.findById(1L)).thenReturn(Optional.of(project(ProjectStatus.EM_ANALISE)));
+        when(memberClient.findById(2L)).thenReturn(Optional.of(funcionario(2L)));
+        when(projectMemberRepository.countActiveAllocationsByMember(eq(2L), any())).thenReturn(0L);
+
+        ProjectResponse response = service.allocateMembers(1L, List.of(2L));
+
+        assertThat(response.memberIds()).containsExactly(2L);
+    }
+
+    @Test
+    void allocate_recusaNaoFuncionario() {
+        when(projectRepository.findById(1L)).thenReturn(Optional.of(project(ProjectStatus.EM_ANALISE)));
+        when(memberClient.findById(5L)).thenReturn(Optional.of(new Member(5L, "Estagiario", "estagiário")));
+
+        assertThatThrownBy(() -> service.allocateMembers(1L, List.of(5L)))
+                .isInstanceOf(BusinessRuleException.class)
+                .hasMessageContaining("funcionario");
+    }
+
+    @Test
+    void allocate_recusaMembroInexistente() {
+        when(projectRepository.findById(1L)).thenReturn(Optional.of(project(ProjectStatus.EM_ANALISE)));
+        when(memberClient.findById(77L)).thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> service.allocateMembers(1L, List.of(77L)))
+                .isInstanceOf(BusinessRuleException.class);
+    }
+
+    @Test
+    void allocate_recusaQuandoMembroEmTresProjetosAtivos() {
+        when(projectRepository.findById(1L)).thenReturn(Optional.of(project(ProjectStatus.EM_ANALISE)));
+        when(memberClient.findById(2L)).thenReturn(Optional.of(funcionario(2L)));
+        when(projectMemberRepository.countActiveAllocationsByMember(eq(2L), any())).thenReturn(3L);
+
+        assertThatThrownBy(() -> service.allocateMembers(1L, List.of(2L)))
+                .isInstanceOf(BusinessRuleException.class)
+                .hasMessageContaining("ativos");
+    }
+
+    @Test
+    void allocate_recusaQuandoExcedeMaximoDeMembros() {
+        // projeto ja com 10 membros
+        Project lotado = project(ProjectStatus.EM_ANALISE, 11L, 12L, 13L, 14L, 15L, 16L, 17L, 18L, 19L, 20L);
+        when(projectRepository.findById(1L)).thenReturn(Optional.of(lotado));
+
+        assertThatThrownBy(() -> service.allocateMembers(1L, List.of(2L)))
+                .isInstanceOf(BusinessRuleException.class)
+                .hasMessageContaining("maximo");
+    }
+
+    @Test
+    void allocate_recusaMembroJaAlocadoNoProjeto() {
+        when(projectRepository.findById(1L)).thenReturn(Optional.of(project(ProjectStatus.EM_ANALISE, 2L)));
+
+        assertThatThrownBy(() -> service.allocateMembers(1L, List.of(2L)))
+                .isInstanceOf(BusinessRuleException.class)
+                .hasMessageContaining("ja esta alocado");
+    }
+
+    // ---------------- deallocate ----------------
+
+    @Test
+    void deallocate_removeMembro() {
+        when(projectRepository.findById(1L)).thenReturn(Optional.of(project(ProjectStatus.EM_ANALISE, 2L)));
+
+        ProjectResponse response = service.deallocateMember(1L, 2L);
+
+        assertThat(response.memberIds()).isEmpty();
+    }
+
+    @Test
+    void deallocate_falhaQuandoMembroNaoAlocado() {
+        when(projectRepository.findById(1L)).thenReturn(Optional.of(project(ProjectStatus.EM_ANALISE)));
+
+        assertThatThrownBy(() -> service.deallocateMember(1L, 2L))
+                .isInstanceOf(ResourceNotFoundException.class);
+    }
+
+    // ---------------- findById ----------------
+
+    @Test
+    void findById_falhaQuandoNaoExiste() {
+        when(projectRepository.findById(1L)).thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> service.findById(1L)).isInstanceOf(ResourceNotFoundException.class);
+    }
+
+    // ---------------- helpers ----------------
+
+    private ProjectRequest request() {
+        return new ProjectRequest("Projeto X", LocalDate.of(2025, 1, 1), LocalDate.of(2025, 3, 1),
+                null, new BigDecimal("50000"), "desc", 1L);
+    }
+
+    private Project project(ProjectStatus status, long... memberIds) {
+        Project project = new Project();
+        project.setName("Projeto X");
+        project.setStartDate(LocalDate.of(2025, 1, 1));
+        project.setExpectedEndDate(LocalDate.of(2025, 3, 1));
+        project.setTotalBudget(new BigDecimal("50000"));
+        project.setManagerId(1L);
+        project.setStatus(status);
+        for (long memberId : memberIds) {
+            project.addMember(new ProjectMember(memberId));
+        }
+        return project;
+    }
+
+    private Member funcionario(Long id) {
+        return new Member(id, "Funcionario " + id, "funcionário");
+    }
+
+    private Member gerente(Long id) {
+        return new Member(id, "Gerente " + id, "gerente");
+    }
+}

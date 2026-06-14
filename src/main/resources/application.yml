@@ -1,0 +1,45 @@
+spring:
+  application:
+    name: portfolio-projetos
+  datasource:
+    url: jdbc:postgresql://${DB_HOST:localhost}:${DB_PORT:5432}/${DB_NAME:portfolio}
+    username: ${DB_USER:portfolio}
+    password: ${DB_PASSWORD:portfolio}
+  jpa:
+    open-in-view: false
+    hibernate:
+      ddl-auto: validate
+    properties:
+      hibernate:
+        format_sql: true
+        jdbc:
+          time_zone: UTC
+  flyway:
+    enabled: true
+
+springdoc:
+  swagger-ui:
+    path: /swagger-ui.html
+    operations-sorter: method
+    tags-sorter: alpha
+
+server:
+  port: ${SERVER_PORT:8080}
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info
+
+# URL da API externa (mockada) de membros consumida via RestClient.
+# Aponta para o provider embutido; pode ser trocada por um servico real.
+members:
+  api:
+    base-url: ${MEMBERS_API_BASE_URL:http://localhost:8080/api/members-provider}
+
+# Credenciais da seguranca basica (em memoria). Sobrescreva via variaveis de ambiente.
+app:
+  security:
+    username: ${APP_USER:admin}
+    password: ${APP_PASSWORD:admin123}

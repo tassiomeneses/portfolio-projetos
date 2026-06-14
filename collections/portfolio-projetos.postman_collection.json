@@ -1,0 +1,243 @@
+{
+  "info": {
+    "name": "Portfolio de Projetos - API",
+    "description": "Coleção completa da API de gestão de portfólio de projetos.\n\nAutenticação: HTTP Basic (variáveis {{username}}/{{password}}, padrão admin/admin123), configurada no nível da coleção. A pasta 'Membros (API externa mockada)' sobrescreve para 'No Auth', pois simula um serviço de terceiros.\n\nFluxo sugerido: 1) criar/listar membros; 2) criar projeto (o id é salvo em {{projectId}}); 3) alocar membros; 4) avançar status; 5) relatório.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "auth": {
+    "type": "basic",
+    "basic": [
+      { "key": "username", "value": "{{username}}", "type": "string" },
+      { "key": "password", "value": "{{password}}", "type": "string" }
+    ]
+  },
+  "variable": [
+    { "key": "baseUrl", "value": "http://localhost:8080" },
+    { "key": "username", "value": "admin" },
+    { "key": "password", "value": "admin123" },
+    { "key": "projectId", "value": "1" },
+    { "key": "memberId", "value": "2" }
+  ],
+  "item": [
+    {
+      "name": "Membros (API externa mockada)",
+      "description": "Serviço externo simulado. Sem autenticação. O domínio de projetos consome estes endpoints via RestClient.",
+      "auth": { "type": "noauth" },
+      "item": [
+        {
+          "name": "Criar membro",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('status 201', () => pm.response.code === 201);",
+                  "pm.collectionVariables.set('memberId', pm.response.json().id);"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Fernanda Alves\",\n  \"attribution\": \"funcionário\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/members-provider/members",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "members-provider", "members"]
+            },
+            "description": "Cria um membro. Atribuições úteis: 'gerente', 'funcionário' (alocável), 'estagiário'."
+          }
+        },
+        {
+          "name": "Listar membros",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/members-provider/members",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "members-provider", "members"]
+            }
+          }
+        },
+        {
+          "name": "Consultar membro por id",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/members-provider/members/{{memberId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "members-provider", "members", "{{memberId}}"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Projetos",
+      "item": [
+        {
+          "name": "Criar projeto",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('status 201', () => pm.response.code === 201);",
+                  "pm.collectionVariables.set('projectId', pm.response.json().id);"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Sistema ERP\",\n  \"startDate\": \"2025-01-01\",\n  \"expectedEndDate\": \"2025-09-01\",\n  \"totalBudget\": 750000.00,\n  \"description\": \"ERP corporativo\",\n  \"managerId\": 1\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/projects",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "projects"]
+            },
+            "description": "Cria um projeto (inicia em EM_ANALISE). O risco é calculado: orçamento>500k OU prazo>6m => ALTO."
+          }
+        },
+        {
+          "name": "Listar projetos (paginado + filtros)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/projects?page=0&size=20&sort=id,asc",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "projects"],
+              "query": [
+                { "key": "page", "value": "0" },
+                { "key": "size", "value": "20" },
+                { "key": "sort", "value": "id,asc" },
+                { "key": "name", "value": "erp", "disabled": true },
+                { "key": "status", "value": "EM_ANALISE", "disabled": true },
+                { "key": "managerId", "value": "1", "disabled": true }
+              ]
+            },
+            "description": "Filtros opcionais (desabilitados por padrão): name (contém), status, managerId."
+          }
+        },
+        {
+          "name": "Consultar projeto por id",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/projects/{{projectId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "projects", "{{projectId}}"]
+            }
+          }
+        },
+        {
+          "name": "Atualizar projeto",
+          "request": {
+            "method": "PUT",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Sistema ERP (revisado)\",\n  \"startDate\": \"2025-01-01\",\n  \"expectedEndDate\": \"2025-12-01\",\n  \"totalBudget\": 820000.00,\n  \"description\": \"ERP corporativo - escopo ampliado\",\n  \"managerId\": 1\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/projects/{{projectId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "projects", "{{projectId}}"]
+            }
+          }
+        },
+        {
+          "name": "Alterar status",
+          "request": {
+            "method": "PATCH",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"status\": \"ANALISE_REALIZADA\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/projects/{{projectId}}/status",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "projects", "{{projectId}}", "status"]
+            },
+            "description": "Respeita a sequência: EM_ANALISE -> ANALISE_REALIZADA -> ANALISE_APROVADA -> INICIADO -> PLANEJADO -> EM_ANDAMENTO -> ENCERRADO. CANCELADO a qualquer momento. Iniciar exige >=1 membro alocado."
+          }
+        },
+        {
+          "name": "Alocar membros",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"memberIds\": [2, 3]\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/projects/{{projectId}}/members",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "projects", "{{projectId}}", "members"]
+            },
+            "description": "Apenas membros 'funcionário'. De 1 a 10 por projeto; um membro em no máximo 3 projetos ativos."
+          }
+        },
+        {
+          "name": "Desalocar membro",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/projects/{{projectId}}/members/{{memberId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "projects", "{{projectId}}", "members", "{{memberId}}"]
+            }
+          }
+        },
+        {
+          "name": "Excluir projeto",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/projects/{{projectId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "projects", "{{projectId}}"]
+            },
+            "description": "Bloqueado quando o status é INICIADO, EM_ANDAMENTO ou ENCERRADO."
+          }
+        }
+      ]
+    },
+    {
+      "name": "Relatórios",
+      "item": [
+        {
+          "name": "Relatório do portfólio",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/reports/portfolio",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "reports", "portfolio"]
+            },
+            "description": "Quantidade e total orçado por status, média de duração dos encerrados e total de membros únicos alocados."
+          }
+        }
+      ]
+    }
+  ]
+}
