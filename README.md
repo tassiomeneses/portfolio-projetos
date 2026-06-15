@@ -1,175 +1,204 @@
-# Portfólio de Projetos — API
+# Portfólio de Projetos API
 
-API REST para gerenciar o portfólio de projetos de uma empresa, cobrindo o ciclo de
-vida completo de cada projeto — da análise de viabilidade à finalização — com gestão
-de equipe, orçamento e classificação de risco.
+API REST para gerenciar o portfólio de projetos de uma empresa, cobrindo cadastro,
+andamento, equipe, orçamento, risco e relatórios.
+
+## O Que Tem
+
+- CRUD de projetos com paginação e filtros.
+- Máquina de estados para controlar o ciclo de vida do projeto.
+- Classificação automática de risco por orçamento e prazo.
+- Alocação de membros com regras de negócio.
+- API mockada de membros, simulando um serviço externo.
+- Relatório consolidado do portfólio.
+- Segurança com HTTP Basic.
+- Swagger UI e coleção Postman.
+- Banco PostgreSQL em Docker, iniciado automaticamente no boot local.
 
 ## Tecnologias
 
-- **Java 25**
-- **Spring Boot 4.0.7** (Spring Framework 7, Spring Security 7, Spring Data JPA / Hibernate 7)
-- **PostgreSQL 17** (em Docker)
-- **Flyway** para versionamento do banco
-- **springdoc-openapi 3** (Swagger UI)
-- **JUnit 5 + Mockito + JaCoCo** (testes e cobertura)
-- **Maven** com wrapper (`mvnw`) — não é preciso instalar o Maven
+- Java 25
+- Spring Boot 4.0.7
+- Spring Web MVC
+- Spring Data JPA / Hibernate
+- Spring Security
+- PostgreSQL 17
+- Flyway
+- springdoc-openapi
+- JUnit 5, Mockito e JaCoCo
+- Docker Compose
+- Maven Wrapper
 
-## Arquitetura
+## Pré-Requisitos
 
-Arquitetura em camadas (MVC), organizada **por funcionalidade**, com separação clara
-entre controller, service e repository:
+- JDK 25 configurado no `JAVA_HOME`.
+- Docker com Docker Compose.
 
-```
-com.code.portfolio
-├── config                 # Security, OpenAPI, RestClient
-├── common/exception       # Exceções de domínio + tratamento global (RFC 7807)
-├── members                # Cliente (RestClient) da API externa de membros
-├── membersprovider        # API externa de membros MOCKADA (serviço de terceiros simulado)
-└── project
-    ├── domain             # Entidades, enum de status (máquina de estados), cálculo de risco
-    ├── dto                # Records de entrada/saída
-    ├── mapper             # Conversão entidade <-> DTO
-    ├── repository         # Spring Data JPA + Specifications (filtros)
-    ├── service            # Regras de negócio (ProjectService, PortfolioReportService)
-    └── web                # Controllers REST
-```
+Não é necessário instalar Maven, porque o projeto usa Maven Wrapper (`mvnw`).
 
-## Pré-requisitos
+## Como Rodar
 
-- **JDK 25** (`JAVA_HOME` apontando para um JDK 25)
-- **Docker** + **Docker Compose**
-
-## Como executar
+Com o Docker aberto, execute:
 
 ```bash
-# 1. Subir o banco PostgreSQL
-docker compose up -d
-
-# 2. Rodar a aplicação (usa o wrapper; não precisa ter Maven instalado)
-./mvnw spring-boot:run          # Linux/macOS
-.\mvnw.cmd spring-boot:run      # Windows
+# Linux/macOS
+./mvnw spring-boot:run
 ```
 
-A aplicação sobe em **http://localhost:8080**.
+```powershell
+# Windows
+.\mvnw.cmd spring-boot:run
+```
 
-- **Swagger UI:** http://localhost:8080/swagger-ui.html
-- **OpenAPI JSON:** http://localhost:8080/v3/api-docs
-- **Health:** http://localhost:8080/actuator/health
+Esse comando:
 
-Para empacotar e rodar o `jar`:
+1. Sobe o PostgreSQL pelo `docker-compose.yml`.
+2. Aguarda o banco ficar saudável.
+3. Executa as migrations do Flyway.
+4. Sobe a API em `http://localhost:8080`.
+
+URLs úteis:
+
+| Recurso | URL |
+|---|---|
+| API | `http://localhost:8080` |
+| Swagger UI | `http://localhost:8080/swagger-ui.html` |
+| OpenAPI JSON | `http://localhost:8080/v3/api-docs` |
+| Health | `http://localhost:8080/actuator/health` |
+| PostgreSQL | `localhost:5432` |
+
+## Rodar Tudo Com Docker Compose
+
+Se quiser subir API e banco em containers:
 
 ```bash
-./mvnw clean package
-java -jar target/portfolio-projetos-0.0.1-SNAPSHOT.jar
+docker compose --profile app up --build
 ```
+
+## Credenciais
+
+A API usa HTTP Basic.
+
+| Usuário | Senha |
+|---|---|
+| `admin` | `admin123` |
+
+Endpoints públicos:
+
+- `/actuator/health`
+- `/swagger-ui.html`
+- `/v3/api-docs`
+- `/api/members-provider/**`
+
+Todos os demais endpoints exigem autenticação.
 
 ## Configuração
 
-Tudo tem valores padrão; sobrescreva por variáveis de ambiente quando necessário:
+Valores padrão:
 
 | Variável | Padrão | Descrição |
 |---|---|---|
-| `DB_HOST` / `DB_PORT` | `localhost` / `5432` | Host/porta do PostgreSQL |
-| `DB_NAME` / `DB_USER` / `DB_PASSWORD` | `portfolio` | Banco e credenciais |
-| `SERVER_PORT` | `8080` | Porta da aplicação |
-| `APP_USER` / `APP_PASSWORD` | `admin` / `admin123` | Credenciais da API |
+| `DB_HOST` | `localhost` | Host do PostgreSQL |
+| `DB_PORT` | `5432` | Porta do PostgreSQL |
+| `DB_NAME` | `portfolio` | Nome do banco |
+| `DB_USER` | `portfolio` | Usuário do banco |
+| `DB_PASSWORD` | `portfolio` | Senha do banco |
+| `SERVER_PORT` | `8080` | Porta da API |
+| `APP_USER` | `admin` | Usuário da API |
+| `APP_PASSWORD` | `admin123` | Senha da API |
 | `MEMBERS_API_BASE_URL` | `http://localhost:8080/api/members-provider` | URL da API de membros |
-| `POSTGRES_PORT` | `5432` | Porta exposta pelo container (docker-compose) |
+| `POSTGRES_PORT` | `5432` | Porta exposta pelo container do PostgreSQL |
 
-## Segurança
-
-Segurança básica com **HTTP Basic** e usuário **em memória** (senha protegida com BCrypt).
-Credenciais padrão: **`admin` / `admin123`**.
-
-Endpoints públicos (sem autenticação): Swagger, `/actuator/health` e a **API externa de
-membros** (`/api/members-provider/**`), que representa um serviço de terceiros. Todo o
-restante exige autenticação.
-
-## Endpoints
+## Endpoints Principais
 
 | Método | Rota | Descrição |
 |---|---|---|
-| `POST` | `/api/projects` | Cria projeto (inicia em `EM_ANALISE`) |
-| `GET` | `/api/projects` | Lista com paginação e filtros (`name`, `status`, `managerId`) |
+| `POST` | `/api/projects` | Cria projeto |
+| `GET` | `/api/projects` | Lista projetos com paginação e filtros |
 | `GET` | `/api/projects/{id}` | Detalha um projeto |
 | `PUT` | `/api/projects/{id}` | Atualiza um projeto |
-| `DELETE` | `/api/projects/{id}` | Exclui (bloqueado em `INICIADO`/`EM_ANDAMENTO`/`ENCERRADO`) |
-| `PATCH` | `/api/projects/{id}/status` | Altera o status (respeita a sequência) |
-| `POST` | `/api/projects/{id}/members` | Aloca membros |
-| `DELETE` | `/api/projects/{id}/members/{memberId}` | Remove alocação |
-| `GET` | `/api/reports/portfolio` | Relatório resumido do portfólio |
-| `POST`/`GET` | `/api/members-provider/members` | API externa mockada de membros |
+| `DELETE` | `/api/projects/{id}` | Exclui um projeto |
+| `PATCH` | `/api/projects/{id}/status` | Altera o status do projeto |
+| `POST` | `/api/projects/{id}/members` | Aloca membros no projeto |
+| `DELETE` | `/api/projects/{id}/members/{memberId}` | Remove membro do projeto |
+| `GET` | `/api/reports/portfolio` | Gera relatório do portfólio |
+| `GET` | `/api/members-provider/members` | Lista membros da API mockada |
+| `POST` | `/api/members-provider/members` | Cria membro na API mockada |
 
-## Coleção Postman
+## Postman
 
 A pasta [`collections/`](collections/) contém:
 
-- `portfolio-projetos.postman_collection.json` — todos os endpoints, com exemplos de
-  corpo, variáveis e scripts que encadeiam o `id` criado.
-- `portfolio-projetos.postman_environment.json` — ambiente local.
+- `portfolio-projetos.postman_collection.json`
+- `portfolio-projetos.postman_environment.json`
 
-Importe os dois no Postman. A autenticação Basic já vem configurada na coleção
-(`{{username}}`/`{{password}}`).
+Importe os dois arquivos no Postman. A coleção já usa as credenciais padrão
+`admin/admin123`.
 
-## Regras de negócio
+Fluxo sugerido:
 
-- **CRUD de projetos** com: nome, data de início, previsão de término, data real de
-  término, orçamento (`BigDecimal`), descrição, gerente e status.
-- **Classificação de risco** (calculada dinamicamente, não persistida) — assume o maior
-  risco entre os critérios de orçamento e prazo:
-  - Baixo: orçamento ≤ R$ 100.000 **e** prazo ≤ 3 meses
-  - Médio: orçamento entre R$ 100.001 e R$ 500.000 **ou** prazo de 3 a 6 meses
-  - Alto: orçamento > R$ 500.000 **ou** prazo > 6 meses
-- **Máquina de estados** dos status (fixos):
-  `EM_ANALISE → ANALISE_REALIZADA → ANALISE_APROVADA → INICIADO → PLANEJADO → EM_ANDAMENTO → ENCERRADO`,
-  com `CANCELADO` aplicável a qualquer status não final. Não é permitido pular etapas.
-- **Exclusão** bloqueada quando o status é `INICIADO`, `EM_ANDAMENTO` ou `ENCERRADO`.
-- **Membros** não são cadastrados diretamente: são criados/consultados por uma **API REST
-  externa mockada**, consumida pelo domínio via `RestClient`.
-- **Alocação**: apenas membros com atribuição `funcionário`; de 1 a 10 por projeto; um
-  membro não pode estar em mais de 3 projetos simultâneos com status diferente de
-  `ENCERRADO`/`CANCELADO`.
-- **Relatório do portfólio**: quantidade de projetos por status, total orçado por status,
-  média de duração dos projetos encerrados e total de membros únicos alocados.
+1. Criar ou listar membros na API mockada.
+2. Criar projeto.
+3. Alocar membros.
+4. Alterar status do projeto.
+5. Consultar o relatório do portfólio.
 
-## Decisões de projeto e premissas
+## Regras de Negócio
 
-- **API de membros mockada**: implementada como um provedor embutido com armazenamento
-  em memória (`/api/members-provider`) e alguns membros pré-carregados (id 1 = gerente;
-  ids 2–4 = funcionários; id 5 = estagiário). O domínio nunca acessa membros pelo banco —
-  sempre via `RestClient`, com a URL externalizada (`MEMBERS_API_BASE_URL`). Como é um
-  serviço de terceiros simulado, fica fora da autenticação da aplicação.
-- **Prazo do risco**: medido em meses completos (`ChronoUnit.MONTHS`) entre início e
-  previsão de término.
-- **"Mínimo de 1 membro"**: interpretado como pré-condição para **iniciar** um projeto
-  (transição para `INICIADO` exige ao menos 1 membro alocado). O máximo de 10 é validado
-  em cada alocação.
-- **Data real de término**: preenchida automaticamente ao encerrar, quando não informada.
-- **Validação**: campos via Bean Validation; regras entre campos e de negócio na camada
-  de serviço, com respostas padronizadas em **RFC 7807 (`ProblemDetail`)**.
-- **DDL**: o schema é versionado por **Flyway**; o Hibernate roda em `ddl-auto=validate`.
+- Todo projeto inicia em `EM_ANALISE`.
+- A sequência de status é:
+  `EM_ANALISE -> ANALISE_REALIZADA -> ANALISE_APROVADA -> INICIADO -> PLANEJADO -> EM_ANDAMENTO -> ENCERRADO`.
+- `CANCELADO` pode ser aplicado a qualquer status não final.
+- Não é permitido pular etapas da máquina de estados.
+- Projetos em `INICIADO`, `EM_ANDAMENTO` ou `ENCERRADO` não podem ser excluídos.
+- Para iniciar um projeto, ele precisa ter ao menos 1 membro alocado.
+- Um projeto pode ter no máximo 10 membros.
+- Apenas membros com atribuição `funcionário` podem ser alocados.
+- Um membro pode estar em no máximo 3 projetos ativos.
+- Membros não são persistidos no banco da aplicação; eles vêm da API mockada.
 
-## Testes e cobertura
+## Risco do Projeto
+
+O risco é calculado automaticamente e não é persistido.
+
+| Risco | Critério |
+|---|---|
+| `BAIXO` | Orçamento até R$ 100.000 e prazo até 3 meses |
+| `MEDIO` | Orçamento entre R$ 100.001 e R$ 500.000 ou prazo entre 3 e 6 meses |
+| `ALTO` | Orçamento acima de R$ 500.000 ou prazo acima de 6 meses |
+
+## Banco de Dados
+
+O schema é versionado com Flyway em [`src/main/resources/db/migration`](src/main/resources/db/migration).
+
+O Hibernate roda com `ddl-auto=validate`, então ele valida o schema, mas não cria nem
+altera tabelas automaticamente. Alterações de banco devem ser feitas por novas
+migrations.
+
+## Testes
+
+Execute:
 
 ```bash
 ./mvnw verify
 ```
 
-Executa os testes unitários e gera o relatório de cobertura em
-`target/site/jacoco/index.html`. A verificação de cobertura (JaCoCo) impõe **mínimo de
-70%** sobre as **regras de negócio** (pacotes de domínio e serviço); camadas triviais e
-de infraestrutura (DTOs, mappers, controllers, configuração, repositórios) são excluídas
-da métrica. Foco dos testes: cálculo de risco, máquina de estados, regras do
-`ProjectService` e do `PortfolioReportService`.
+No Windows:
 
-## Solução de problemas
+```powershell
+.\mvnw.cmd verify
+```
 
-- **Porta 5432 já em uso** (outro PostgreSQL local): suba o container em outra porta e
-  aponte a aplicação para ela:
-  ```bash
-  POSTGRES_PORT=5433 docker compose up -d
-  DB_PORT=5433 ./mvnw spring-boot:run
-  ```
-- **Falha ao baixar dependências** (ambientes com mirror/repositório Maven corporativo
-  que não exponha o Maven Central): use um `settings.xml` apontando para o Central, por
-  exemplo `./mvnw -s settings-central.xml ...`.
+Esse comando roda os testes e valida a cobertura mínima configurada no JaCoCo.
+
+O relatório de cobertura é gerado em:
+
+```text
+target/site/jacoco/index.html
+```
+
+## Problemas Comuns
+
+- Se a porta `5432` estiver ocupada, pare o PostgreSQL local ou outro container que
+  esteja usando essa porta.
+- Se a porta `8080` estiver ocupada, defina outra porta com `SERVER_PORT`.

@@ -9,7 +9,6 @@ import com.code.portfolio.project.dto.ProjectResponse;
 import com.code.portfolio.project.dto.ProjectSummaryResponse;
 import org.springframework.stereotype.Component;
 
-/** Conversao entre a entidade {@link Project} e seus DTOs. */
 @Component
 public class ProjectMapper {
 
@@ -19,14 +18,12 @@ public class ProjectMapper {
         this.riskCalculator = riskCalculator;
     }
 
-    /** Cria uma nova entidade a partir do request (status definido na persistencia). */
     public Project toEntity(ProjectRequest request) {
         Project project = new Project();
         applyEditableFields(project, request);
         return project;
     }
 
-    /** Aplica os campos editaveis do request em um projeto existente. */
     public void updateEntity(Project project, ProjectRequest request) {
         applyEditableFields(project, request);
     }

@@ -31,8 +31,10 @@
               "listen": "test",
               "script": {
                 "exec": [
-                  "pm.test('status 201', () => pm.response.code === 201);",
-                  "pm.collectionVariables.set('memberId', pm.response.json().id);"
+                  "pm.test('status 201', () => pm.expect(pm.response.code).to.eql(201));",
+                  "const memberId = pm.response.json().id;",
+                  "pm.environment.set('memberId', memberId);",
+                  "pm.collectionVariables.set('memberId', memberId);"
                 ],
                 "type": "text/javascript"
               }
@@ -89,8 +91,10 @@
               "listen": "test",
               "script": {
                 "exec": [
-                  "pm.test('status 201', () => pm.response.code === 201);",
-                  "pm.collectionVariables.set('projectId', pm.response.json().id);"
+                  "pm.test('status 201', () => pm.expect(pm.response.code).to.eql(201));",
+                  "const projectId = pm.response.json().id;",
+                  "pm.environment.set('projectId', projectId);",
+                  "pm.collectionVariables.set('projectId', projectId);"
                 ],
                 "type": "text/javascript"
               }
@@ -184,7 +188,7 @@
             "header": [{ "key": "Content-Type", "value": "application/json" }],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"memberIds\": [2, 3]\n}"
+              "raw": "{\n  \"memberIds\": [{{memberId}}, 3]\n}"
             },
             "url": {
               "raw": "{{baseUrl}}/api/projects/{{projectId}}/members",

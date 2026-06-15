@@ -16,5 +16,29 @@ services:
       timeout: 5s
       retries: 5
 
+  app:
+    profiles:
+      - app
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: portfolio-api
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      DB_HOST: postgres
+      DB_PORT: 5432
+      DB_NAME: ${POSTGRES_DB:-portfolio}
+      DB_USER: ${POSTGRES_USER:-portfolio}
+      DB_PASSWORD: ${POSTGRES_PASSWORD:-portfolio}
+      SERVER_PORT: 8080
+      APP_USER: ${APP_USER:-admin}
+      APP_PASSWORD: ${APP_PASSWORD:-admin123}
+      MEMBERS_API_BASE_URL: http://localhost:8080/api/members-provider
+    ports:
+      - "${APP_PORT:-8080}:8080"
+    restart: unless-stopped
+
 volumes:
   portfolio_pgdata:

@@ -66,7 +66,13 @@
 		<dependency>
 			<groupId>org.postgresql</groupId>
 			<artifactId>postgresql</artifactId>
-			<scope>runtime</scope>
+		</dependency>
+
+		<!-- Sobe os servicos do docker-compose em desenvolvimento -->
+		<dependency>
+			<groupId>org.springframework.boot</groupId>
+			<artifactId>spring-boot-docker-compose</artifactId>
+			<optional>true</optional>
 		</dependency>
 
 		<!-- Documentacao OpenAPI / Swagger UI -->
