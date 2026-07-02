@@ -2,6 +2,8 @@ package com.code.portfolio.project.service;
 
 import com.code.portfolio.project.domain.Project;
 import com.code.portfolio.project.domain.ProjectStatus;
+import com.code.portfolio.project.domain.RiskCalculator;
+import com.code.portfolio.project.domain.RiskLevel;
 import com.code.portfolio.project.dto.PortfolioReportResponse;
 import com.code.portfolio.project.repository.ProjectMemberRepository;
 import com.code.portfolio.project.repository.ProjectRepository;
@@ -21,11 +23,15 @@ public class PortfolioReportService {
 
     private final ProjectRepository projectRepository;
     private final ProjectMemberRepository projectMemberRepository;
+    private final RiskCalculator riskCalculator;
 
     public PortfolioReportService(
-            ProjectRepository projectRepository, ProjectMemberRepository projectMemberRepository) {
+            ProjectRepository projectRepository,
+            ProjectMemberRepository projectMemberRepository,
+            RiskCalculator riskCalculator) {
         this.projectRepository = projectRepository;
         this.projectMemberRepository = projectMemberRepository;
+        this.riskCalculator = riskCalculator;
     }
 
     @Transactional(readOnly = true)
@@ -40,8 +46,19 @@ public class PortfolioReportService {
         return new PortfolioReportResponse(
                 countByStatus,
                 budgetByStatus,
+                countByRisk(),
                 averageDurationOfClosedProjects(),
                 projectMemberRepository.countDistinctMembers());
+    }
+
+    private Map<RiskLevel, Long> countByRisk() {
+        Map<RiskLevel, Long> countByRisk = new EnumMap<>(RiskLevel.class);
+        for (Project project : projectRepository.findAll()) {
+            RiskLevel risk = riskCalculator.calcular(
+                    project.getTotalBudget(), project.getStartDate(), project.getExpectedEndDate());
+            countByRisk.merge(risk, 1L, Long::sum);
+        }
+        return countByRisk;
     }
 
     /** Media de duracao (em dias) dos projetos encerrados; {@code null} quando nao ha encerrados. */

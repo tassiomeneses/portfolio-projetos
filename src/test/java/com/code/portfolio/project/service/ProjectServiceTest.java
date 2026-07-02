@@ -16,13 +16,14 @@ import com.code.portfolio.project.domain.Project;
 import com.code.portfolio.project.domain.ProjectMember;
 import com.code.portfolio.project.domain.ProjectStatus;
 import com.code.portfolio.project.domain.RiskCalculator;
+import com.code.portfolio.project.domain.RiskLevel;
 import com.code.portfolio.project.dto.ProjectRequest;
 import com.code.portfolio.project.dto.ProjectResponse;
+import com.code.portfolio.project.dto.ProjectSummaryResponse;
 import com.code.portfolio.project.mapper.ProjectMapper;
 import com.code.portfolio.project.repository.ProjectMemberRepository;
 import com.code.portfolio.project.repository.ProjectRepository;
 import java.math.BigDecimal;
-import org.springframework.data.repository.CrudRepository;
 import java.time.LocalDate;
 import java.util.List;
 import java.util.Optional;
@@ -31,6 +32,13 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageImpl;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Sort;
+import org.springframework.data.jpa.domain.Specification;
+import org.springframework.data.repository.CrudRepository;
 
 @ExtendWith(MockitoExtension.class)
 class ProjectServiceTest {
@@ -44,7 +52,8 @@ class ProjectServiceTest {
     @BeforeEach
     void setUp() {
         ProjectMapper mapper = new ProjectMapper(new RiskCalculator());
-        service = new ProjectService(projectRepository, projectMemberRepository, mapper, memberClient);
+        service = new ProjectService(
+                projectRepository, projectMemberRepository, mapper, memberClient, new RiskCalculator());
     }
 
     // ---------------- create ----------------
@@ -254,6 +263,74 @@ class ProjectServiceTest {
         assertThatThrownBy(() -> service.findById(1L)).isInstanceOf(ResourceNotFoundException.class);
     }
 
+    // ---------------- list ----------------
+
+    @Test
+    void list_filtraPorRiscoCalculado() {
+        Pageable pageable = PageRequest.of(0, 20, Sort.by("id"));
+        when(projectRepository.findAll(anyProjectSpecification(), eq(pageable.getSort()))).thenReturn(List.of(
+                listProject("Baixo", "50000", LocalDate.of(2025, 1, 1), LocalDate.of(2025, 3, 1), 1L),
+                listProject("Medio", "250000", LocalDate.of(2025, 1, 1), LocalDate.of(2025, 5, 1), 1L),
+                listProject("Alto", "750000", LocalDate.of(2025, 1, 1), LocalDate.of(2025, 3, 1), 1L)));
+
+        Page<ProjectSummaryResponse> response = service.list(null, null, null, RiskLevel.ALTO, pageable);
+
+        assertThat(response.getTotalElements()).isEqualTo(1);
+        assertThat(response.getContent()).extracting(ProjectSummaryResponse::name).containsExactly("Alto");
+        assertThat(response.getContent()).allSatisfy(project -> assertThat(project.risk()).isEqualTo(RiskLevel.ALTO));
+    }
+
+    @Test
+    void list_combinaFiltroDeGerenteComRisco() {
+        Pageable pageable = PageRequest.of(0, 20);
+        when(projectRepository.findAll(anyProjectSpecification(), eq(pageable.getSort()))).thenReturn(List.of(
+                listProject("Alto gerente 1", "750000", LocalDate.of(2025, 1, 1), LocalDate.of(2025, 3, 1), 1L),
+                listProject("Medio gerente 1", "250000", LocalDate.of(2025, 1, 1), LocalDate.of(2025, 5, 1), 1L)));
+
+        Page<ProjectSummaryResponse> response = service.list(null, null, 1L, RiskLevel.ALTO, pageable);
+
+        assertThat(response.getTotalElements()).isEqualTo(1);
+        assertThat(response.getContent()).extracting(ProjectSummaryResponse::name).containsExactly("Alto gerente 1");
+        assertThat(response.getContent()).allSatisfy(project -> {
+            assertThat(project.managerId()).isEqualTo(1L);
+            assertThat(project.risk()).isEqualTo(RiskLevel.ALTO);
+        });
+    }
+
+    @Test
+    void list_semRiscoMantemFluxoPaginadoExistente() {
+        Pageable pageable = PageRequest.of(0, 20, Sort.by("id"));
+        Project project = listProject("Projeto existente", "50000", LocalDate.of(2025, 1, 1),
+                LocalDate.of(2025, 3, 1), 1L);
+        when(projectRepository.findAll(anyProjectSpecification(), eq(pageable)))
+                .thenReturn(new PageImpl<>(List.of(project), pageable, 1));
+
+        Page<ProjectSummaryResponse> response = service.list(null, ProjectStatus.EM_ANALISE, 1L, null, pageable);
+
+        assertThat(response.getTotalElements()).isEqualTo(1);
+        assertThat(response.getContent()).extracting(ProjectSummaryResponse::name).containsExactly("Projeto existente");
+        verify(projectRepository).findAll(anyProjectSpecification(), eq(pageable));
+        verify(projectRepository, never()).findAll(anyProjectSpecification(), any(Sort.class));
+    }
+
+    @Test
+    void list_filtraPorRiscoComMetadadosDePaginacaoCorretos() {
+        Pageable pageable = PageRequest.of(1, 2, Sort.by("name"));
+        when(projectRepository.findAll(anyProjectSpecification(), eq(pageable.getSort()))).thenReturn(List.of(
+                listProject("Alto A", "750000", LocalDate.of(2025, 1, 1), LocalDate.of(2025, 3, 1), 1L),
+                listProject("Baixo", "50000", LocalDate.of(2025, 1, 1), LocalDate.of(2025, 3, 1), 1L),
+                listProject("Alto B", "800000", LocalDate.of(2025, 1, 1), LocalDate.of(2025, 3, 1), 1L),
+                listProject("Alto C", "900000", LocalDate.of(2025, 1, 1), LocalDate.of(2025, 3, 1), 1L)));
+
+        Page<ProjectSummaryResponse> response = service.list(null, null, null, RiskLevel.ALTO, pageable);
+
+        assertThat(response.getNumber()).isEqualTo(1);
+        assertThat(response.getSize()).isEqualTo(2);
+        assertThat(response.getTotalElements()).isEqualTo(3);
+        assertThat(response.getTotalPages()).isEqualTo(2);
+        assertThat(response.getContent()).extracting(ProjectSummaryResponse::name).containsExactly("Alto C");
+    }
+
     // ---------------- helpers ----------------
 
     private ProjectRequest request() {
@@ -273,6 +350,22 @@ class ProjectServiceTest {
             project.addMember(new ProjectMember(memberId));
         }
         return project;
+    }
+
+    private Project listProject(String name, String totalBudget, LocalDate startDate, LocalDate expectedEndDate,
+            Long managerId) {
+        Project project = new Project();
+        project.setName(name);
+        project.setStartDate(startDate);
+        project.setExpectedEndDate(expectedEndDate);
+        project.setTotalBudget(new BigDecimal(totalBudget));
+        project.setManagerId(managerId);
+        project.setStatus(ProjectStatus.EM_ANALISE);
+        return project;
+    }
+
+    private Specification<Project> anyProjectSpecification() {
+        return any();
     }
 
     private Member funcionario(Long id) {

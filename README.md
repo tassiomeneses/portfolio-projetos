@@ -121,9 +121,26 @@ Valores padrão:
 | `PATCH` | `/api/projects/{id}/status` | Altera o status do projeto |
 | `POST` | `/api/projects/{id}/members` | Aloca membros no projeto |
 | `DELETE` | `/api/projects/{id}/members/{memberId}` | Remove membro do projeto |
-| `GET` | `/api/reports/portfolio` | Gera relatório do portfólio |
+| `GET` | `/api/reports/portfolio` | Gera relatório do portfólio, incluindo distribuição por status e risco |
 | `GET` | `/api/members-provider/members` | Lista membros da API mockada |
 | `POST` | `/api/members-provider/members` | Cria membro na API mockada |
+
+Filtros disponíveis em `GET /api/projects`:
+
+| Parâmetro | Valores | Descrição |
+|---|---|---|
+| `name` | Texto livre | Filtra projetos cujo nome contém o texto informado |
+| `status` | Status do projeto | Filtra por status atual |
+| `managerId` | ID numérico | Filtra por gerente |
+| `risk` | `BAIXO`, `MEDIO`, `ALTO` | Filtra por risco calculado |
+
+Exemplos:
+
+```http
+GET /api/projects?risk=ALTO
+GET /api/projects?managerId=1&risk=ALTO
+GET /api/projects?status=EM_ANDAMENTO&risk=MEDIO
+```
 
 ## Postman
 
@@ -166,6 +183,29 @@ O risco é calculado automaticamente e não é persistido.
 | `BAIXO` | Orçamento até R$ 100.000 e prazo até 3 meses |
 | `MEDIO` | Orçamento entre R$ 100.001 e R$ 500.000 ou prazo entre 3 e 6 meses |
 | `ALTO` | Orçamento acima de R$ 500.000 ou prazo acima de 6 meses |
+
+## Relatório do Portfólio
+
+O endpoint `GET /api/reports/portfolio` retorna os agregados principais do portfólio:
+
+```json
+{
+  "quantidadePorStatus": {
+    "EM_ANALISE": 1,
+    "EM_ANDAMENTO": 1
+  },
+  "totalOrcadoPorStatus": {
+    "EM_ANALISE": 150000.0,
+    "EM_ANDAMENTO": 750000.0
+  },
+  "quantidadePorRisco": {
+    "MEDIO": 1,
+    "ALTO": 1
+  },
+  "mediaDuracaoDiasProjetosEncerrados": null,
+  "totalMembrosUnicosAlocados": 3
+}
+```
 
 ## Banco de Dados
 

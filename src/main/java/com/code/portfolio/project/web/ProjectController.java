@@ -1,6 +1,7 @@
 package com.code.portfolio.project.web;
 
 import com.code.portfolio.project.domain.ProjectStatus;
+import com.code.portfolio.project.domain.RiskLevel;
 import com.code.portfolio.project.dto.AllocateMembersRequest;
 import com.code.portfolio.project.dto.ChangeStatusRequest;
 import com.code.portfolio.project.dto.ProjectRequest;
@@ -54,13 +55,14 @@ public class ProjectController {
     }
 
     @GetMapping
-    @Operation(summary = "Lista projetos com filtros (name, status, managerId) e paginacao")
+    @Operation(summary = "Lista projetos com filtros (name, status, managerId, risk) e paginacao")
     public Page<ProjectSummaryResponse> list(
             @RequestParam(required = false) String name,
             @RequestParam(required = false) ProjectStatus status,
             @RequestParam(required = false) Long managerId,
+            @RequestParam(required = false) RiskLevel risk,
             @ParameterObject @PageableDefault(size = 20, sort = "id") Pageable pageable) {
-        return service.list(name, status, managerId, pageable);
+        return service.list(name, status, managerId, risk, pageable);
     }
 
     @PutMapping("/{id}")

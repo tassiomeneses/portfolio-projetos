@@ -7,6 +7,8 @@ import com.code.portfolio.members.MemberClient;
 import com.code.portfolio.project.domain.Project;
 import com.code.portfolio.project.domain.ProjectMember;
 import com.code.portfolio.project.domain.ProjectStatus;
+import com.code.portfolio.project.domain.RiskCalculator;
+import com.code.portfolio.project.domain.RiskLevel;
 import com.code.portfolio.project.dto.ProjectRequest;
 import com.code.portfolio.project.dto.ProjectResponse;
 import com.code.portfolio.project.dto.ProjectSummaryResponse;
@@ -17,6 +19,7 @@ import com.code.portfolio.project.repository.ProjectSpecifications;
 import java.time.LocalDate;
 import java.util.List;
 import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -36,16 +39,19 @@ public class ProjectService {
     private final ProjectMemberRepository projectMemberRepository;
     private final ProjectMapper mapper;
     private final MemberClient memberClient;
+    private final RiskCalculator riskCalculator;
 
     public ProjectService(
             ProjectRepository projectRepository,
             ProjectMemberRepository projectMemberRepository,
             ProjectMapper mapper,
-            MemberClient memberClient) {
+            MemberClient memberClient,
+            RiskCalculator riskCalculator) {
         this.projectRepository = projectRepository;
         this.projectMemberRepository = projectMemberRepository;
         this.mapper = mapper;
         this.memberClient = memberClient;
+        this.riskCalculator = riskCalculator;
     }
 
     @Transactional
@@ -63,10 +69,38 @@ public class ProjectService {
 
     @Transactional(readOnly = true)
     public Page<ProjectSummaryResponse> list(
-            String name, ProjectStatus status, Long managerId, Pageable pageable) {
+            String name, ProjectStatus status, Long managerId, RiskLevel risk, Pageable pageable) {
+        if (risk != null) {
+            return listByCalculatedRisk(name, status, managerId, risk, pageable);
+        }
         return projectRepository
                 .findAll(ProjectSpecifications.withFilters(name, status, managerId), pageable)
                 .map(mapper::toSummary);
+    }
+
+    private Page<ProjectSummaryResponse> listByCalculatedRisk(
+            String name, ProjectStatus status, Long managerId, RiskLevel risk, Pageable pageable) {
+        List<Project> filtered = projectRepository
+                .findAll(ProjectSpecifications.withFilters(name, status, managerId), pageable.getSort())
+                .stream()
+                .filter(project -> risk(project) == risk)
+                .toList();
+
+        if (pageable.isUnpaged()) {
+            return new PageImpl<>(filtered.stream().map(mapper::toSummary).toList());
+        }
+
+        int start = (int) Math.min(pageable.getOffset(), filtered.size());
+        int end = (int) Math.min((long) start + pageable.getPageSize(), filtered.size());
+        List<ProjectSummaryResponse> content = filtered.subList(start, end).stream()
+                .map(mapper::toSummary)
+                .toList();
+        return new PageImpl<>(content, pageable, filtered.size());
+    }
+
+    private RiskLevel risk(Project project) {
+        return riskCalculator.calcular(
+                project.getTotalBudget(), project.getStartDate(), project.getExpectedEndDate());
     }
 
     @Transactional

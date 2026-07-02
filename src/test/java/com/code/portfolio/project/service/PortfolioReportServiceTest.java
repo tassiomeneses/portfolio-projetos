@@ -5,6 +5,8 @@ import static org.mockito.Mockito.when;
 
 import com.code.portfolio.project.domain.Project;
 import com.code.portfolio.project.domain.ProjectStatus;
+import com.code.portfolio.project.domain.RiskCalculator;
+import com.code.portfolio.project.domain.RiskLevel;
 import com.code.portfolio.project.dto.PortfolioReportResponse;
 import com.code.portfolio.project.repository.ProjectMemberRepository;
 import com.code.portfolio.project.repository.ProjectRepository;
@@ -28,7 +30,7 @@ class PortfolioReportServiceTest {
 
     @BeforeEach
     void setUp() {
-        service = new PortfolioReportService(projectRepository, projectMemberRepository);
+        service = new PortfolioReportService(projectRepository, projectMemberRepository, new RiskCalculator());
     }
 
     @Test
@@ -36,6 +38,7 @@ class PortfolioReportServiceTest {
         when(projectRepository.aggregateByStatus()).thenReturn(List.of(
                 aggregation(ProjectStatus.EM_ANALISE, 2, "150000"),
                 aggregation(ProjectStatus.ENCERRADO, 1, "300000")));
+        when(projectRepository.findAll()).thenReturn(List.of());
         when(projectRepository.findByStatus(ProjectStatus.ENCERRADO)).thenReturn(List.of());
         when(projectMemberRepository.countDistinctMembers()).thenReturn(4L);
 
@@ -43,6 +46,7 @@ class PortfolioReportServiceTest {
 
         assertThat(report.quantidadePorStatus()).containsEntry(ProjectStatus.EM_ANALISE, 2L);
         assertThat(report.totalOrcadoPorStatus()).containsEntry(ProjectStatus.ENCERRADO, new BigDecimal("300000"));
+        assertThat(report.quantidadePorRisco()).isEmpty();
         assertThat(report.totalMembrosUnicosAlocados()).isEqualTo(4L);
         assertThat(report.mediaDuracaoDiasProjetosEncerrados()).isNull();
     }
@@ -50,6 +54,7 @@ class PortfolioReportServiceTest {
     @Test
     void gerarCalculaMediaDeDuracaoDosProjetosEncerrados() {
         when(projectRepository.aggregateByStatus()).thenReturn(List.of());
+        when(projectRepository.findAll()).thenReturn(List.of());
         when(projectRepository.findByStatus(ProjectStatus.ENCERRADO)).thenReturn(List.of(
                 closed(LocalDate.of(2025, 1, 1), LocalDate.of(2025, 1, 11)),   // 10 dias
                 closed(LocalDate.of(2025, 1, 1), LocalDate.of(2025, 1, 21))));  // 20 dias
@@ -58,6 +63,23 @@ class PortfolioReportServiceTest {
         PortfolioReportResponse report = service.generate();
 
         assertThat(report.mediaDuracaoDiasProjetosEncerrados()).isEqualTo(15.0);
+    }
+
+    @Test
+    void gerarAgregaQuantidadePorRiscoCalculado() {
+        when(projectRepository.aggregateByStatus()).thenReturn(List.of());
+        when(projectRepository.findAll()).thenReturn(List.of(
+                project("50000", LocalDate.of(2025, 1, 1), LocalDate.of(2025, 3, 1)),
+                project("250000", LocalDate.of(2025, 1, 1), LocalDate.of(2025, 5, 1)),
+                project("750000", LocalDate.of(2025, 1, 1), LocalDate.of(2025, 3, 1))));
+        when(projectRepository.findByStatus(ProjectStatus.ENCERRADO)).thenReturn(List.of());
+        when(projectMemberRepository.countDistinctMembers()).thenReturn(0L);
+
+        PortfolioReportResponse report = service.generate();
+
+        assertThat(report.quantidadePorRisco()).containsEntry(RiskLevel.BAIXO, 1L);
+        assertThat(report.quantidadePorRisco()).containsEntry(RiskLevel.MEDIO, 1L);
+        assertThat(report.quantidadePorRisco()).containsEntry(RiskLevel.ALTO, 1L);
     }
 
     private StatusAggregation aggregation(ProjectStatus status, long quantidade, String total) {
@@ -88,6 +110,17 @@ class PortfolioReportServiceTest {
         project.setTotalBudget(new BigDecimal("1000"));
         project.setManagerId(1L);
         project.setStatus(ProjectStatus.ENCERRADO);
+        return project;
+    }
+
+    private Project project(String totalBudget, LocalDate start, LocalDate expectedEnd) {
+        Project project = new Project();
+        project.setName("Projeto");
+        project.setStartDate(start);
+        project.setExpectedEndDate(expectedEnd);
+        project.setTotalBudget(new BigDecimal(totalBudget));
+        project.setManagerId(1L);
+        project.setStatus(ProjectStatus.EM_ANALISE);
         return project;
     }
 }
